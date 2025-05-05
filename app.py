@@ -55,8 +55,7 @@ def get_python_files_content(repo_url, access_token=None):
     readme = get_summarization(prompt1)
 
     # Prompt to generate 1-line summary
-     prompt2 = f"""
-    {readme}
+     prompt2 = f""" {readme}
     Strictly the output need to be single line text
     Provide a simple 1-line explanation about the project.
     1-line description as plain text, without any special formatting like LaTeX or markdown. 
