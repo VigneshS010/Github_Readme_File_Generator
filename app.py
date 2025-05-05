@@ -41,24 +41,25 @@ def get_python_files_content(repo_url, access_token=None):
     all_code = "\n".join(["\n".join(file_content) for file_content in python_files_content])
 
     # Prompt to generate full README
-    prompt1 = f"""
-    Create a comprehensive README file content for the following Python code from a GitHub repository. 
+    prompt1 = f""" Create a comprehensive README file content for the following Python code from a GitHub repository. 
     Include installation instructions, usage examples, contributing guidelines, and license information if possible.
 
     Code:
     {all_code}
 
     Do not include any author or publish year. Simply mention the license.
-    If any API keys are in the file, do NOT show them in the README. Very important.
-    Output should be plain text only — no symbols, curly braces, or markdown formatting.
+
+    if any api keys in the file dont mention that in the readme file, dont show the api key in publically for the viewers in the readme file, it is very important
+    Do not include any surrounding boxes, curly braces, or any other symbols. Just the plain text.
     """
     readme = get_summarization(prompt1)
 
     # Prompt to generate 1-line summary
-    prompt2 = f"""
+     prompt2 = f"""
     {readme}
-    Strictly output a 1-line explanation about the project.
-    Do not use LaTeX or markdown formatting — just plain text.
+    Strictly the output need to be single line text
+    Provide a simple 1-line explanation about the project.
+    1-line description as plain text, without any special formatting like LaTeX or markdown. 
     """
     simple_summary = get_summarization(prompt2)
 
