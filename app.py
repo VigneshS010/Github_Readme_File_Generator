@@ -66,22 +66,33 @@ def get_python_files_content(repo_url, access_token=None):
 
 # Function to summarize using OpenRouter
 def get_summarization(prompt):
-    response = requests.post(
-        url="https://openrouter.ai/api/v1/chat/completions",
-        headers={
-            "Authorization": f"Bearer {st.secrets['OPENROUTER_API_KEY']}",
-            "Content-Type": "application/json",
-            "HTTP-Referer": "https://your-site.com",  # Optional
-            "X-Title": "GitHub README Generator",     # Optional
-        },
-        data=json.dumps({
-            "model": "deepseek/deepseek-r1-zero:free",
-            "messages": [{"role": "user", "content": prompt}],
-        })
-    )
+    try:
+        response = requests.post(
+            url="https://openrouter.ai/api/v1/chat/completions",
+            headers={
+                "Authorization": f"Bearer {st.secrets['OPENROUTER_API_KEY']}",
+                "Content-Type": "application/json",
+                "HTTP-Referer": "https://your-site.com",
+                "X-Title": "GitHub README Generator",
+            },
+            data=json.dumps({
+                "model": "deepseek/deepseek-r1-zero:free",
+                "messages": [{"role": "user", "content": prompt}],
+            })
+        )
+        result = response.json()
 
-    result = response.json()
-    return result["choices"][0]["message"]["content"]
+        # Debug log
+        if "choices" not in result:
+            st.error("OpenRouter API error:")
+            st.json(result)  # Show the full response
+            return "ERROR: Could not generate summary"
+
+        return result["choices"][0]["message"]["content"]
+
+    except Exception as e:
+        st.error(f"OpenRouter call failed: {e}")
+        return "ERROR: Summarization failed"
 
 
 # --- Streamlit UI ---
