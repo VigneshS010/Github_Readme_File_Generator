@@ -1,19 +1,15 @@
 import streamlit as st
-import os
+import os 
 import json
 import requests
 import base64
 
-
+# Function to get content from a GitHub repository
 def get_python_files_content(repo_url, access_token=None):
     """
-    Retrieves Python or Jupyter files from a GitHub repository and returns their contents.
+    Retrieves Python and notebook files from a GitHub repository and returns a list of their contents.
     """
-    if not repo_url:
-        st.warning("Please enter a valid GitHub repo URL.")
-        return "", ""
-
-    repo_name = repo_url.replace("https://github.com/", "").strip("/")
+    repo_name = repo_url.replace("https://github.com/", "").rstrip('/')
     api_url = f"https://api.github.com/repos/{repo_name}/contents"
 
     headers = {}
@@ -23,11 +19,8 @@ def get_python_files_content(repo_url, access_token=None):
     try:
         response = requests.get(api_url, headers=headers)
         response.raise_for_status()
-    except requests.exceptions.HTTPError as err:
-        st.error(f"Failed to fetch repo contents. Error: {err}")
-        return "", ""
-    except requests.exceptions.RequestException as err:
-        st.error(f"Request error occurred: {err}")
+    except requests.exceptions.RequestException as e:
+        st.error(f"Failed to fetch repo contents. Error: {e}")
         return "", ""
 
     contents = response.json()
@@ -36,51 +29,18 @@ def get_python_files_content(repo_url, access_token=None):
 
     while queue:
         item = queue.pop(0)
-        if item["type"] == "file" and (item["name"].endswith(".py") or item["name"].endswith(".ipynb")):
-            try:
-                file_response = requests.get(item["download_url"], headers=headers)
-                file_response.raise_for_status()
-                python_files_content.append(file_response.text.splitlines())
-            except requests.exceptions.RequestException as err:
-                st.warning(f"Could not fetch file: {item['name']}. Skipping. Error: {err}")
+        if item["type"] == "file" and (item["name"].endswith(".py") or item['name'].endswith('.ipynb')):
+            file_response = requests.get(item["download_url"], headers=headers)
+            file_response.raise_for_status()
+            python_files_content.append(file_response.text.splitlines())
         elif item["type"] == "dir":
-            try:
-                dir_response = requests.get(item["url"], headers=headers)
-                dir_response.raise_for_status()
-                queue.extend(dir_response.json())
-            except requests.exceptions.RequestException as err:
-                st.warning(f"Could not fetch directory: {item['path']}. Skipping. Error: {err}")
-
-    if not python_files_content:
-        st.warning("No Python or Jupyter files found in the repository.")
-        return "", ""
-
-    def get_summarization(prompt):
-        try:
-            response = requests.post(
-                url="https://openrouter.ai/api/v1/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {st.secrets['OPENROUTER_API_KEY']}",
-                    "Content-Type": "application/json",
-                    "HTTP-Referer": "<YOUR_SITE_URL>",  # Optional
-                    "X-Title": "<YOUR_SITE_NAME>",      # Optional
-                },
-                data=json.dumps({
-                    "model": "deepseek/deepseek-r1-zero:free",
-                    "messages": [
-                        {"role": "user", "content": prompt}
-                    ]
-                })
-            )
-            response.raise_for_status()
-            result = response.json()
-            return result["choices"][0]["message"]["content"]
-        except Exception as e:
-            st.error(f"Summarization failed: {e}")
-            return ""
+            dir_response = requests.get(item["url"], headers=headers)
+            dir_response.raise_for_status()
+            queue.extend(dir_response.json())
 
     all_code = "\n".join(["\n".join(file_content) for file_content in python_files_content])
 
+    # Prompt to generate full README
     prompt1 = f"""
     Create a comprehensive README file content for the following Python code from a GitHub repository. 
     Include installation instructions, usage examples, contributing guidelines, and license information if possible.
@@ -89,40 +49,64 @@ def get_python_files_content(repo_url, access_token=None):
     {all_code}
 
     Do not include any author or publish year. Simply mention the license.
-
-    If any API keys are present in the code, DO NOT include or expose them in the README file.
-    Just give plain text, no extra symbols, boxes, or formatting.
+    If any API keys are in the file, do NOT show them in the README. Very important.
+    Output should be plain text only — no symbols, curly braces, or markdown formatting.
     """
     readme = get_summarization(prompt1)
 
+    # Prompt to generate 1-line summary
     prompt2 = f"""
     {readme}
-    Strictly the output needs to be a single-line plain text explanation about the project.
-    No formatting like markdown or LaTeX. Just return the 1-line plain text summary.
+    Strictly output a 1-line explanation about the project.
+    Do not use LaTeX or markdown formatting — just plain text.
     """
     simple_summary = get_summarization(prompt2)
 
     return readme, simple_summary
 
+# Function to summarize using OpenRouter
+def get_summarization(prompt):
+    response = requests.post(
+        url="https://openrouter.ai/api/v1/chat/completions",
+        headers={
+            "Authorization": f"Bearer {st.secrets['OPENROUTER_API_KEY']}",
+            "Content-Type": "application/json",
+            "HTTP-Referer": "https://your-site.com",  # Optional
+            "X-Title": "GitHub README Generator",     # Optional
+        },
+        data=json.dumps({
+            "model": "deepseek/deepseek-r1-zero:free",
+            "messages": [{"role": "user", "content": prompt}],
+        })
+    )
 
-# Streamlit App
-st.title("📄 GitHub README File Generator")
-url = st.text_input("🔗 Enter GitHub Repository URL:")
+    result = response.json()
+    return result["choices"][0]["message"]["content"]
 
-if st.button("🚀 Generate README"):
-    readme_text, summary = get_python_files_content(url)
 
-    if readme_text and summary:
-        st.subheader("📝 Project Summary (1-line):")
-        st.code(summary.strip())
+# --- Streamlit UI ---
+st.title("🛠️ GitHub README File Generator")
 
-        st.subheader("📘 README.md Content:")
-        st.code(readme_text.strip())
+url = st.text_input("Enter GitHub Repo URL (e.g., https://github.com/username/repo):")
 
-        # Download link
-        b64 = base64.b64encode(readme_text.encode()).decode()
-        href = f'<a href="data:file/md;base64,{b64}" download="README.md">📥 Download README.md</a>'
-        st.markdown(href, unsafe_allow_html=True)
+if st.button("Generate README"):
+    if url:
+        readme_text, summary = get_python_files_content(
+            url, access_token=st.secrets["GITHUB_ACCESS_TOKEN"]
+        )
+
+        if readme_text:
+            st.subheader("📌 1-Line Project Summary")
+            st.code(summary.strip())
+
+            st.subheader("📄 Generated README.md Content")
+            st.code(readme_text.strip())
+
+            # Download Link
+            b64 = base64.b64encode(readme_text.encode()).decode()
+            href = f'<a href="data:file/md;base64,{b64}" download="README.md">📥 Download README.md</a>'
+            st.markdown(href, unsafe_allow_html=True)
+
 
 
 
