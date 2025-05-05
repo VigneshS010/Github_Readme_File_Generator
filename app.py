@@ -76,7 +76,7 @@ def get_summarization(prompt):
                 "X-Title": "GitHub README Generator",
             },
             data=json.dumps({
-                "model": "deepseek/deepseek-r1-zero:free",
+                "model": "deepseek/deepseek-r1:free",
                 "messages": [{"role": "user", "content": prompt}],
             })
         )
